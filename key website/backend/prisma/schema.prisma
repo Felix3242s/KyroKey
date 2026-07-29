@@ -1,0 +1,132 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MODERATOR
+}
+
+enum LicenseDuration {
+  DAY_1
+  DAY_3
+  DAY_7
+  DAY_30
+  DAY_90
+  LIFETIME
+}
+
+enum LicenseStatus {
+  ACTIVE
+  EXPIRED
+  BLOCKED
+  PENDING
+}
+
+model User {
+  id                String    @id @default(uuid())
+  email             String    @unique
+  username          String    @unique
+  password          String
+  role              Role      @default(MODERATOR)
+  twoFactorSecret   String?
+  twoFactorEnabled  Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  lastLogin         DateTime?
+  
+  loginHistory      LoginHistory[]
+  auditLogs         AuditLog[]
+  createdLicenses   License[] @relation("CreatedBy")
+  resetHWIDs        HWIDReset[]
+  
+  @@index([email])
+  @@index([username])
+}
+
+model License {
+  id              String          @id @default(uuid())
+  key             String          @unique
+  duration        LicenseDuration
+  status          LicenseStatus   @default(PENDING)
+  expiresAt       DateTime?
+  activatedAt     DateTime?
+  hwid            String?
+  hwidLocked      Boolean         @default(false)
+  note            String?
+  apiKeyId        String?         @unique
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  createdBy       User            @relation("CreatedBy", fields: [createdById], references: [id])
+  createdById     String
+  
+  hwidResets      HWIDReset[]
+  auditLogs       AuditLog[]
+  
+  @@index([key])
+  @@index([status])
+  @@index([expiresAt])
+  @@index([createdById])
+}
+
+model HWIDReset {
+  id          String   @id @default(uuid())
+  licenseId   String
+  license     License  @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  oldHWID     String
+  newHWID     String?
+  resetBy     User     @relation(fields: [resetById], references: [id])
+  resetById   String
+  reason      String?
+  createdAt   DateTime @default(now())
+  
+  @@index([licenseId])
+}
+
+model LoginHistory {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ipAddress   String
+  userAgent   String
+  success     Boolean
+  createdAt   DateTime @default(now())
+  
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  action      String
+  entityType  String
+  entityId    String
+  details     String?
+  ipAddress   String
+  createdAt   DateTime @default(now())
+  
+  @@index([userId])
+  @@index([entityType])
+  @@index([createdAt])
+}
+
+model ApiKey {
+  id          String   @id @default(uuid())
+  name        String
+  key         String   @unique
+  permissions String[] @default([])
+  isActive    Boolean  @default(true)
+  lastUsed    DateTime?
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime?
+  
+  @@index([key])
+}
